@@ -13,24 +13,35 @@
       margin-top: 10px;
       font-weight: bold;
     }
+    #packGrid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 12px;
+      margin-top: 20px;
+    }
     .pack {
-      padding: 10px;
+      padding: 12px;
       border: 1px solid #ccc;
       border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      background: #fff;
     }
     .pack select {
       width: 100%;
-      margin-bottom: 5px;
       font-weight: bold;
-      padding: 5px;
+      padding: 6px;
       border-radius: 4px;
       border: 1px solid #aaa;
       cursor: pointer;
       appearance: none;
-      background-color: #f8d7da; /* light red = incomplete */
+      background-color: #f8d7da; /* red-ish when incomplete */
+      color: #333;
+      transition: background-color 0.3s ease;
     }
     .pack select.assigned {
-      background-color: #d4edda; /* light green = complete */
+      background-color: #d4edda; /* green-ish when selected */
       border-color: #28a745;
       color: #155724;
     }
@@ -208,6 +219,9 @@
     const packsPerManifest = parseInt(document.getElementById('packsPerManifest').value);
     const packGrid = document.getElementById('packGrid');
 
+    // Clone the walletInventory for decrementing without losing original counts
+    const inventoryCounts = {...walletInventory};
+
     for (let i = 0; i < packsPerManifest; i++) {
       const packDiv = document.createElement('div');
       packDiv.className = 'pack';
@@ -221,33 +235,37 @@
         placeholder.selected = true;
         select.appendChild(placeholder);
 
-        for (const key in walletInventory) {
+        for (const key in inventoryCounts) {
+          const count = inventoryCounts[key];
           const option = document.createElement('option');
           option.value = key;
-          option.text = `${key} (${walletInventory[key]} left)`;
-          if (walletInventory[key] <= 0) {
-            option.disabled = true;
-          }
+          option.text = `${key} (${count} left)`;
+          option.disabled = count <= 0;
           select.appendChild(option);
         }
 
         select.addEventListener('change', (e) => {
           const value = e.target.value;
-          if (!walletInventory[value] || walletInventory[value] <= 0) {
-            alert("No copies left.");
-            return;
+          const packIndex = i;
+          const cardIndex = j;
+
+          // Increase inventory of previously selected token for this dropdown, if any
+          const prev = currentSelections[packIndex][cardIndex];
+          if (prev) {
+            inventoryCounts[prev]++;
           }
 
-          // Undo previous selection if any
-          const previous = currentSelections[i][j];
-          if (previous) {
-            walletInventory[previous]++;
+          // Decrement newly selected token inventory
+          if (inventoryCounts[value] > 0) {
+            inventoryCounts[value]--;
+            currentSelections[packIndex][cardIndex] = value;
+            updateGridSelections(inventoryCounts);
+          } else {
+            alert("No copies left for selected token.");
+            // revert selection to blank
+            e.target.value = '';
+            delete currentSelections[packIndex][cardIndex];
           }
-
-          currentSelections[i][j] = value;
-          walletInventory[value]--;
-
-          updateGrid();
         });
 
         packDiv.appendChild(select);
@@ -255,40 +273,43 @@
 
       packGrid.appendChild(packDiv);
     }
+    updateGridSelections(inventoryCounts);
   }
 
-  function updateGrid() {
+  // Update all dropdowns and their options + colors + export button enablement
+  function updateGridSelections(inventoryCounts) {
     const selects = document.querySelectorAll('#packGrid select');
     selects.forEach(select => {
-      const current = select.value;
+      const currentVal = select.value;
+      // Clear options
       select.innerHTML = '';
 
       const placeholder = document.createElement('option');
       placeholder.text = 'Select a token';
       placeholder.disabled = true;
-      if (!current) placeholder.selected = true;
+      if (!currentVal) placeholder.selected = true;
       select.appendChild(placeholder);
 
-      for (const key in walletInventory) {
+      for (const key in inventoryCounts) {
+        const count = inventoryCounts[key];
         const option = document.createElement('option');
-        const left = walletInventory[key];
         option.value = key;
-        option.text = `${key} (${left} left)`;
-        option.disabled = left <= 0;
-        if (key === current) {
+        option.text = `${key} (${count} left)`;
+        option.disabled = count <= 0 && key !== currentVal;
+        if (key === currentVal) {
           option.selected = true;
         }
         select.appendChild(option);
       }
 
-      select.className = current ? 'assigned' : '';
+      select.className = currentVal ? 'assigned' : '';
     });
 
-    const complete = currentSelections.every(pack =>
-      pack.length > 0 && pack.every(entry => entry)
-    );
+    // Check if all packs are fully assigned (no empty selects)
+    const allComplete = currentSelections.length > 0 &&
+      currentSelections.every(pack => pack.length > 0 && pack.every(Boolean));
 
-    document.getElementById('exportManifest').disabled = !complete;
+    document.getElementById('exportManifest').disabled = !allComplete;
   }
 
   function exportManifest() {
@@ -308,7 +329,7 @@
   document.getElementById('generateGridBtn').onclick = generatePackGrid;
   document.getElementById('exportManifest').onclick = exportManifest;
 
-  // Init
+  // Init with one empty collection row
   addCollectionRow();
 </script>
 
