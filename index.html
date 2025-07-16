@@ -1,469 +1,279 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Booster Pack Manifest Generator</title>
-<style>
-  body {
-    font-family: Arial, sans-serif;
-    margin: 12px;
-    background: #f4f6f8;
-    color: #222;
-  }
-  #connectWallet, #disconnectWallet, #addCollectionBtn, #loadInventoryBtn, #generateGridBtn, #exportManifest {
-    margin: 6px 6px 12px 0;
-    padding: 8px 14px;
-    border: none;
-    background-color: #0069d9;
-    color: white;
-    border-radius: 4px;
-    cursor: pointer;
-    font-weight: 600;
-  }
-  #disconnectWallet {
-    background-color: #dc3545;
-  }
-  #connectWallet:disabled,
-  #disconnectWallet:disabled,
-  #addCollectionBtn:disabled,
-  #loadInventoryBtn:disabled,
-  #generateGridBtn:disabled,
-  #exportManifest:disabled {
-    background-color: #999;
-    cursor: not-allowed;
-  }
-  #walletAddress {
-    margin-bottom: 14px;
-    font-weight: bold;
-  }
-  #collectionsList .collection-row {
-    margin-bottom: 8px;
-  }
-  #collectionsList .collection-row input.address,
-  #collectionsList .collection-row input.alias {
-    padding: 6px 8px;
-    margin-right: 6px;
-    width: 280px;
-    font-size: 14px;
-  }
-  #collectionsList .collection-row input.alias {
-    width: 80px;
-    text-transform: uppercase;
-  }
-  #collectionsList .collection-row button {
-    background-color: #dc3545;
-    color: white;
-    border-radius: 50%;
-    border: none;
-    width: 24px;
-    height: 24px;
-    font-weight: bold;
-    cursor: pointer;
-  }
-  #loadInventoryStatus {
-    margin-top: 8px;
-    font-weight: 600;
-  }
-  #packGrid {
-    margin-top: 20px;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-    gap: 10px;
-  }
-  .pack {
-    background: white;
-    border-radius: 6px;
-    padding: 12px;
-    box-shadow: 0 0 5px #ccc;
-    display: flex;
-    flex-direction: column;
-  }
-  .pack label {
-    margin-bottom: 6px;
-    font-weight: 600;
-    font-size: 14px;
-  }
-  .pack select {
-    padding: 6px 8px;
-    font-size: 14px;
-    border-radius: 4px;
-    border: 1px solid #ccc;
-    cursor: pointer;
-    background-color: #f8d7da; /* default red background */
-  }
-  .pack select.assigned {
-    background-color: #d1e7dd; /* light green */
-  }
-</style>
-<script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Booster Pack Manifest Generator</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; background: #f4f6f8; }
+    button { margin: 6px 6px 12px 0; padding: 8px 14px; font-weight: 600; border: none; border-radius: 4px; cursor: pointer; }
+    #connectWallet { background-color: #0069d9; color: white; }
+    #disconnectWallet { background-color: #dc3545; color: white; display: none; }
+    button:disabled { background-color: #999 !important; cursor: not-allowed; }
+    input { margin: 5px 0; padding: 6px 8px; }
+    .collection-row { margin-bottom: 8px; }
+    .collection-row input { width: 250px; margin-right: 6px; }
+    .collection-row input.alias { width: 80px; text-transform: uppercase; }
+    .collection-row button { background-color: #dc3545; color: white; border-radius: 50%; width: 24px; height: 24px; font-weight: bold; }
+
+    #packsWrapper { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 20px; margin-top: 20px; }
+    .pack-box {
+      background: white;
+      border-radius: 10px;
+      padding: 14px;
+      box-shadow: 0 0 5px #ccc;
+    }
+    .pack-box h4 {
+      margin-top: 0;
+      font-size: 16px;
+      font-weight: bold;
+      color: #333;
+      margin-bottom: 12px;
+    }
+    .dropdown-slot {
+      margin-bottom: 8px;
+    }
+    .dropdown-slot select {
+      width: 100%;
+      padding: 6px;
+      border-radius: 4px;
+      background-color: #f8d7da; /* red */
+    }
+    .dropdown-slot select.assigned {
+      background-color: #d1e7dd !important; /* green */
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
 </head>
 <body>
 
 <h2>Booster Pack Manifest Generator</h2>
-
 <button id="connectWallet">Connect Wallet</button>
-<button id="disconnectWallet" style="display:none;">Disconnect Wallet</button>
+<button id="disconnectWallet">Disconnect Wallet</button>
 <div id="walletAddress">Not connected</div>
 
 <h3>Allowed Collections</h3>
 <div id="collectionsList"></div>
 <button id="addCollectionBtn" disabled>Add Collection</button>
-<button id="loadInventoryBtn" style="margin-top:10px;" disabled>Load Inventory</button>
-
+<button id="loadInventoryBtn" disabled>Load Inventory</button>
 <div id="loadInventoryStatus"></div>
 
-<div style="margin-top: 20px;">
-  <label for="cardsPerPack">Cards per Pack:</label>
-  <input type="number" id="cardsPerPack" value="5" min="1" max="50" disabled />
-  <br /><br />
-  <label for="packsPerManifest">Number of Packs:</label>
-  <input type="number" id="packsPerManifest" value="3" min="1" max="100" disabled />
-  <br /><br />
-  <button id="generateGridBtn" disabled>Generate Pack Grid</button>
-</div>
+<h3>Packs Configuration</h3>
+<label>Cards per Pack: <input type="number" id="cardsPerPack" value="5" min="1" max="50" disabled></label><br>
+<label>Number of Packs: <input type="number" id="packsPerManifest" value="3" min="1" max="100" disabled></label><br>
+<button id="generateGridBtn" disabled>Generate Pack Grid</button>
 
-<div id="packGrid"></div>
-
-<button id="exportManifest" style="margin-top: 20px;" disabled>Export Manifest</button>
+<div id="packsWrapper"></div>
+<button id="exportManifest" disabled>Export Manifest</button>
 
 <script>
-  let provider;
-  let signer;
-  let connectedAddress = null;
-  let allowedCollections = [];
-  let walletInventory = {};
-  let currentSelections = [];
+let provider, signer, connectedAddress = null;
+let allowedCollections = [], walletInventory = {}, currentSelections = [];
 
-  // --- UI Elements ---
-  const connectBtn = document.getElementById('connectWallet');
-  const disconnectBtn = document.getElementById('disconnectWallet');
-  const walletAddressDiv = document.getElementById('walletAddress');
-  const addCollectionBtn = document.getElementById('addCollectionBtn');
-  const collectionsListDiv = document.getElementById('collectionsList');
-  const loadInventoryBtn = document.getElementById('loadInventoryBtn');
-  const loadInventoryStatus = document.getElementById('loadInventoryStatus');
-  const cardsPerPackInput = document.getElementById('cardsPerPack');
-  const packsPerManifestInput = document.getElementById('packsPerManifest');
-  const generateGridBtn = document.getElementById('generateGridBtn');
-  const packGridDiv = document.getElementById('packGrid');
-  const exportManifestBtn = document.getElementById('exportManifest');
+const connectBtn = document.getElementById('connectWallet');
+const disconnectBtn = document.getElementById('disconnectWallet');
+const walletAddressDiv = document.getElementById('walletAddress');
+const addCollectionBtn = document.getElementById('addCollectionBtn');
+const collectionsListDiv = document.getElementById('collectionsList');
+const loadInventoryBtn = document.getElementById('loadInventoryBtn');
+const loadInventoryStatus = document.getElementById('loadInventoryStatus');
+const cardsPerPackInput = document.getElementById('cardsPerPack');
+const packsPerManifestInput = document.getElementById('packsPerManifest');
+const generateGridBtn = document.getElementById('generateGridBtn');
+const packsWrapper = document.getElementById('packsWrapper');
+const exportManifestBtn = document.getElementById('exportManifest');
 
-  // --- Connect Wallet ---
-  connectBtn.addEventListener('click', async () => {
-    if (window.ethereum) {
-      try {
-        await window.ethereum.request({ method: 'eth_requestAccounts' });
-        provider = new ethers.providers.Web3Provider(window.ethereum);
-        signer = provider.getSigner();
-        connectedAddress = await signer.getAddress();
-        walletAddressDiv.innerText = `Connected: ${connectedAddress}`;
-        connectBtn.style.display = 'none';
-        disconnectBtn.style.display = 'inline-block';
-        resetAll();
-        enableUIAfterConnect();
-      } catch (err) {
-        alert('Wallet connection failed.');
-        console.error(err);
-      }
-    } else {
-      alert('MetaMask not detected. Please install it.');
-    }
-  });
+disableUI();
 
-  // --- Disconnect Wallet ---
-  disconnectBtn.addEventListener('click', () => {
-    connectedAddress = null;
-    provider = null;
-    signer = null;
-    walletAddressDiv.innerText = 'Not connected';
-    connectBtn.style.display = 'inline-block';
-    disconnectBtn.style.display = 'none';
-    resetAll();
-    disableUIBeforeConnect();
-  });
-
-  // --- Add Collection Row ---
-  function addCollectionRow(address = '', alias = '') {
-    const row = document.createElement('div');
-    row.className = 'collection-row';
-
-    const addrInput = document.createElement('input');
-    addrInput.type = 'text';
-    addrInput.placeholder = 'Collection Address (0x...)';
-    addrInput.value = address;
-    addrInput.className = 'address';
-    addrInput.autocomplete = 'off';
-
-    const aliasInput = document.createElement('input');
-    aliasInput.type = 'text';
-    aliasInput.placeholder = 'Alias (e.g. PWR)';
-    aliasInput.value = alias.toUpperCase();
-    aliasInput.className = 'alias';
-    aliasInput.maxLength = 5;
-    aliasInput.style.textTransform = 'uppercase';
-
-    const removeBtn = document.createElement('button');
-    removeBtn.textContent = 'X';
-    removeBtn.title = 'Remove this collection';
-    removeBtn.addEventListener('click', () => {
-      collectionsListDiv.removeChild(row);
-    });
-
-    row.appendChild(addrInput);
-    row.appendChild(aliasInput);
-    row.appendChild(removeBtn);
-    collectionsListDiv.appendChild(row);
-  }
-
-  addCollectionBtn.addEventListener('click', () => {
-    addCollectionRow();
-  });
-
-  // --- Gather Collections from UI ---
-  function gatherCollections() {
-    allowedCollections = [];
-    const rows = document.querySelectorAll('#collectionsList .collection-row');
-    for (const row of rows) {
-      const addr = row.querySelector('input.address').value.trim();
-      const alias = row.querySelector('input.alias').value.trim().toUpperCase();
-      if (ethers.utils.isAddress(addr) && alias.length > 0) {
-        allowedCollections.push({ address: addr, alias });
-      }
-    }
-  }
-
-  // --- Reset UI and Data ---
-  function resetAll() {
-    allowedCollections = [];
-    walletInventory = {};
-    currentSelections = [];
-    collectionsListDiv.innerHTML = '';
-    loadInventoryStatus.innerText = '';
-    packGridDiv.innerHTML = '';
-    exportManifestBtn.disabled = true;
-    cardsPerPackInput.value = 5;
-    packsPerManifestInput.value = 3;
-    cardsPerPackInput.disabled = true;
-    packsPerManifestInput.disabled = true;
-    generateGridBtn.disabled = true;
-    loadInventoryBtn.disabled = true;
-  }
-  function disableUIBeforeConnect() {
-    addCollectionBtn.disabled = true;
-    loadInventoryBtn.disabled = true;
-    cardsPerPackInput.disabled = true;
-    packsPerManifestInput.disabled = true;
-    generateGridBtn.disabled = true;
-    exportManifestBtn.disabled = true;
-  }
-  function enableUIAfterConnect() {
-    addCollectionBtn.disabled = false;
-    loadInventoryBtn.disabled = false;
-    cardsPerPackInput.disabled = false;
-    packsPerManifestInput.disabled = false;
-    generateGridBtn.disabled = false;
-    exportManifestBtn.disabled = true;
-  }
-
-  // Initially disable UI except connect button
-  disableUIBeforeConnect();
-
-  // --- Load Inventory ---
-  loadInventoryBtn.addEventListener('click', async () => {
-    gatherCollections();
-    if (allowedCollections.length === 0) {
-      alert('Please add at least one valid collection before loading inventory.');
-      return;
-    }
-    loadInventoryStatus.style.color = '#007bff';
-    loadInventoryStatus.innerText = 'Loading inventory...';
-    walletInventory = {};
+connectBtn.onclick = async () => {
+  if (window.ethereum) {
     try {
-      for (const col of allowedCollections) {
-        const contractAddress = col.address;
-        const alias = col.alias;
-        const abi = [ "function balanceOfBatch(address[] accounts, uint256[] ids) view returns (uint256[])" ];
-        const contract = new ethers.Contract(contractAddress, abi, provider);
-        const accounts = [];
-        const ids = [];
-        for (let i = 0; i < 100; i++) {
-          accounts.push(connectedAddress);
-          ids.push(i);
-        }
-        const balances = await contract.balanceOfBatch(accounts, ids);
-        for (let i = 0; i < balances.length; i++) {
-          const bal = balances[i].toNumber ? balances[i].toNumber() : balances[i];
-          if (bal > 0) {
-            const key = alias + '/' + i;
-            walletInventory[key] = {
-              contractAddress,
-              tokenId: i,
-              alias,
-              balance: bal,
-              originalBalance: bal
-            };
-          }
-        }
-      }
-      const countTokens = Object.keys(walletInventory).length;
-      loadInventoryStatus.style.color = 'green';
-      loadInventoryStatus.innerText = `Inventory loaded. Found ${countTokens} token${countTokens !== 1 ? 's' : ''}.`;
-      generateGridBtn.disabled = false;
-      exportManifestBtn.disabled = true;
-      packGridDiv.innerHTML = '';
-      currentSelections = [];
-    } catch (e) {
-      loadInventoryStatus.style.color = 'red';
-      loadInventoryStatus.innerText = 'Error loading inventory. See console.';
-      console.error(e);
+      await window.ethereum.request({ method: 'eth_requestAccounts' });
+      provider = new ethers.providers.Web3Provider(window.ethereum);
+      signer = provider.getSigner();
+      connectedAddress = await signer.getAddress();
+      walletAddressDiv.innerText = `Connected: ${connectedAddress}`;
+      connectBtn.style.display = 'none';
+      disconnectBtn.style.display = 'inline-block';
+      enableUI();
+    } catch (err) {
+      alert('Wallet connection failed');
+      console.error(err);
+    }
+  } else alert('MetaMask not detected');
+};
+
+disconnectBtn.onclick = () => {
+  connectedAddress = null;
+  provider = null;
+  signer = null;
+  walletAddressDiv.innerText = 'Not connected';
+  connectBtn.style.display = 'inline-block';
+  disconnectBtn.style.display = 'none';
+  disableUI();
+};
+
+function enableUI() {
+  addCollectionBtn.disabled = false;
+  loadInventoryBtn.disabled = false;
+  cardsPerPackInput.disabled = false;
+  packsPerManifestInput.disabled = false;
+  generateGridBtn.disabled = false;
+}
+
+function disableUI() {
+  addCollectionBtn.disabled = true;
+  loadInventoryBtn.disabled = true;
+  cardsPerPackInput.disabled = true;
+  packsPerManifestInput.disabled = true;
+  generateGridBtn.disabled = true;
+  exportManifestBtn.disabled = true;
+}
+
+function addCollectionRow(addr = '', alias = '') {
+  const row = document.createElement('div');
+  row.className = 'collection-row';
+  row.innerHTML = `
+    <input class="address" type="text" placeholder="Collection Address (0x...)" value="${addr}">
+    <input class="alias" type="text" placeholder="Alias" maxlength="5" value="${alias.toUpperCase()}">
+    <button>X</button>
+  `;
+  row.querySelector('button').onclick = () => collectionsListDiv.removeChild(row);
+  collectionsListDiv.appendChild(row);
+}
+
+addCollectionBtn.onclick = () => addCollectionRow();
+
+function gatherCollections() {
+  allowedCollections = [];
+  document.querySelectorAll('.collection-row').forEach(row => {
+    const address = row.querySelector('.address').value.trim();
+    const alias = row.querySelector('.alias').value.trim().toUpperCase();
+    if (ethers.utils.isAddress(address) && alias) {
+      allowedCollections.push({ address, alias });
     }
   });
+}
 
-  // --- Generate Pack Grid ---
-  generateGridBtn.addEventListener('click', () => {
-    const cardsPerPack = parseInt(cardsPerPackInput.value, 10);
-    const packsPerManifest = parseInt(packsPerManifestInput.value, 10);
-    if (isNaN(cardsPerPack) || cardsPerPack < 1 || cardsPerPack > 50) {
-      alert('Cards per pack must be a number between 1 and 50.');
-      return;
+loadInventoryBtn.onclick = async () => {
+  gatherCollections();
+  if (allowedCollections.length === 0) return alert('Add at least one collection.');
+  loadInventoryStatus.innerText = 'Loading...';
+  walletInventory = {};
+  try {
+    for (const { address, alias } of allowedCollections) {
+      const abi = ["function balanceOfBatch(address[],uint256[]) view returns (uint256[])"];
+      const contract = new ethers.Contract(address, abi, provider);
+      const accounts = Array(100).fill(connectedAddress);
+      const ids = Array.from({ length: 100 }, (_, i) => i);
+      const balances = await contract.balanceOfBatch(accounts, ids);
+      balances.forEach((bal, i) => {
+        const b = bal.toNumber?.() || bal;
+        if (b > 0) {
+          const key = `${alias}/${i}`;
+          walletInventory[key] = { contractAddress: address, tokenId: i, alias, balance: b };
+        }
+      });
     }
-    if (isNaN(packsPerManifest) || packsPerManifest < 1 || packsPerManifest > 100) {
-      alert('Number of packs must be a number between 1 and 100.');
-      return;
-    }
-    currentSelections = new Array(cardsPerPack * packsPerManifest).fill(null);
-    packGridDiv.innerHTML = '';
+    loadInventoryStatus.innerText = `Inventory loaded. Found ${Object.keys(walletInventory).length} token(s).`;
+    packsWrapper.innerHTML = '';
+    currentSelections = [];
+    exportManifestBtn.disabled = true;
+  } catch (e) {
+    console.error(e);
+    loadInventoryStatus.innerText = 'Error loading inventory.';
+  }
+};
 
-    for (let i = 0; i < cardsPerPack * packsPerManifest; i++) {
-      const packDiv = document.createElement('div');
-      packDiv.className = 'pack';
+generateGridBtn.onclick = () => {
+  const cardsPerPack = +cardsPerPackInput.value;
+  const packs = +packsPerManifestInput.value;
+  packsWrapper.innerHTML = '';
+  currentSelections = Array(packs).fill(null).map(() => Array(cardsPerPack).fill(null));
 
-      const label = document.createElement('label');
-      label.innerText = `Card ${i + 1}`;
-      label.htmlFor = `pack-select-${i}`;
+  for (let p = 0; p < packs; p++) {
+    const box = document.createElement('div');
+    box.className = 'pack-box';
+    box.innerHTML = `<h4>Pack ${p + 1}</h4>`;
+    for (let c = 0; c < cardsPerPack; c++) {
+      const slot = document.createElement('div');
+      slot.className = 'dropdown-slot';
 
       const select = document.createElement('select');
-      select.id = `pack-select-${i}`;
+      select.dataset.pack = p;
+      select.dataset.card = c;
 
-      // Default option - no selection (starts red)
       const defaultOption = document.createElement('option');
       defaultOption.value = '';
       defaultOption.innerText = 'Select token';
       select.appendChild(defaultOption);
 
-      // Populate dropdown with all tokens with balance > 0
       for (const key in walletInventory) {
         if (walletInventory[key].balance > 0) {
-          const option = document.createElement('option');
-          option.value = key;
-          option.innerText = `${key} (${walletInventory[key].balance} left)`;
-          select.appendChild(option);
+          const opt = document.createElement('option');
+          opt.value = key;
+          opt.innerText = `${key} (${walletInventory[key].balance} left)`;
+          select.appendChild(opt);
         }
       }
 
-      // On user select
-      select.addEventListener('change', (e) => {
-        const newValue = e.target.value;
-        const index = i;
-        const prevValue = currentSelections[index];
+      select.onchange = () => {
+        const packIndex = +select.dataset.pack;
+        const cardIndex = +select.dataset.card;
+        const prev = currentSelections[packIndex][cardIndex];
+        if (prev) walletInventory[prev].balance++;
 
-        // Restore balance if user changed selection or cleared
-        if (prevValue) {
-          walletInventory[prevValue].balance++;
-        }
-
-        if (newValue && walletInventory[newValue].balance > 0) {
-          walletInventory[newValue].balance--;
-          currentSelections[index] = newValue;
-          e.target.classList.add('assigned'); // green background
+        const selected = select.value;
+        if (selected && walletInventory[selected].balance > 0) {
+          walletInventory[selected].balance--;
+          currentSelections[packIndex][cardIndex] = selected;
+          select.classList.add('assigned');
         } else {
-          currentSelections[index] = null;
-          e.target.classList.remove('assigned'); // red background
+          currentSelections[packIndex][cardIndex] = null;
+          select.classList.remove('assigned');
         }
 
         refreshAllDropdowns();
+        exportManifestBtn.disabled = currentSelections.flat().includes(null);
+      };
 
-        exportManifestBtn.disabled = currentSelections.includes(null);
-      });
-
-      packDiv.appendChild(label);
-      packDiv.appendChild(select);
-      packGridDiv.appendChild(packDiv);
+      slot.appendChild(select);
+      box.appendChild(slot);
     }
-    exportManifestBtn.disabled = true;
-  });
-
-  // --- Refresh dropdowns to update balances & disable zero-balance tokens ---
-  function refreshAllDropdowns() {
-    for (let i = 0; i < currentSelections.length; i++) {
-      const select = document.getElementById(`pack-select-${i}`);
-      if (!select) continue;
-      const currentSelected = currentSelections[i];
-
-      // Remove all options except first (default)
-      while (select.options.length > 1) {
-        select.remove(1);
-      }
-
-      for (const key in walletInventory) {
-        const bal = walletInventory[key].balance;
-        const option = document.createElement('option');
-        option.value = key;
-        option.innerText = `${key} (${bal} left)`;
-        if (bal === 0 && currentSelected !== key) {
-          option.disabled = true;
-        }
-        select.appendChild(option);
-      }
-
-      if (currentSelected) {
-        select.value = currentSelected;
-        select.classList.add('assigned');
-      } else {
-        select.value = '';
-        select.classList.remove('assigned');
-      }
-    }
+    packsWrapper.appendChild(box);
   }
+};
 
-  // --- Export Manifest JSON ---
-  exportManifestBtn.addEventListener('click', () => {
-    const cardsPerPack = parseInt(cardsPerPackInput.value, 10);
-    const packsPerManifest = parseInt(packsPerManifestInput.value, 10);
-
-    const manifest = [];
-
-    for (let packIndex = 0; packIndex < packsPerManifest; packIndex++) {
-      const pack = [];
-      for (let cardIndex = 0; cardIndex < cardsPerPack; cardIndex++) {
-        const selectionIndex = packIndex * cardsPerPack + cardIndex;
-        const tokenKey = currentSelections[selectionIndex];
-        if (tokenKey) {
-          const token = walletInventory[tokenKey];
-          pack.push({
-            contractAddress: token.contractAddress,
-            tokenId: token.tokenId,
-            alias: token.alias
-          });
-        } else {
-          pack.push(null);
-        }
-      }
-      manifest.push(pack);
+function refreshAllDropdowns() {
+  document.querySelectorAll('select').forEach(select => {
+    const selectedVal = select.value;
+    while (select.options.length > 1) select.remove(1);
+    for (const key in walletInventory) {
+      const opt = document.createElement('option');
+      opt.value = key;
+      opt.innerText = `${key} (${walletInventory[key].balance} left)`;
+      if (walletInventory[key].balance === 0 && key !== selectedVal) opt.disabled = true;
+      select.appendChild(opt);
     }
-
-    const manifestJSON = JSON.stringify(manifest, null, 2);
-    const blob = new Blob([manifestJSON], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'booster_pack_manifest.json';
-    a.click();
-
-    URL.revokeObjectURL(url);
+    select.value = selectedVal;
   });
+}
+
+exportManifestBtn.onclick = () => {
+  const manifest = currentSelections.map(pack =>
+    pack.map(key => {
+      const { contractAddress, tokenId, alias } = walletInventory[key];
+      return { contractAddress, tokenId, alias };
+    })
+  );
+  const blob = new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'booster_pack_manifest.json';
+  a.click();
+  URL.revokeObjectURL(url);
+};
 </script>
 </body>
 </html>
