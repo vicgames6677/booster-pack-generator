@@ -16,12 +16,12 @@
     .collection-row input.alias { width: 80px; text-transform: uppercase; }
     .collection-row button { background-color: #dc3545; color: white; border-radius: 50%; width: 24px; height: 24px; font-weight: bold; }
 
-    #packsWrapper { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 20px; margin-top: 20px; }
+    #packsWrapper { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; margin-top: 20px; }
     .pack-box {
       background: white;
-      border-radius: 10px;
-      padding: 14px;
-      box-shadow: 0 0 5px #ccc;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 0 6px #ccc;
     }
     .pack-box h4 {
       margin-top: 0;
@@ -31,16 +31,17 @@
       margin-bottom: 12px;
     }
     .dropdown-slot {
-      margin-bottom: 8px;
+      margin-bottom: 10px;
     }
     .dropdown-slot select {
       width: 100%;
-      padding: 6px;
-      border-radius: 4px;
-      background-color: #f8d7da; /* red */
+      padding: 8px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      background-color: #f8d7da;
     }
     .dropdown-slot select.assigned {
-      background-color: #d1e7dd !important; /* green */
+      background-color: #d1e7dd !important;
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
