@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
@@ -91,6 +90,7 @@
     border-radius: 4px;
     border: 1px solid #ccc;
     cursor: pointer;
+    background-color: #f8d7da; /* default red background */
   }
   .pack select.assigned {
     background-color: #d1e7dd; /* light green */
@@ -102,8 +102,8 @@
 
 <h2>Booster Pack Manifest Generator</h2>
 
-<button id="connectWallet">Connect Wallet</button> <button id="disconnectWallet" style="display:none;">Disconnect Wallet</button>
-
+<button id="connectWallet">Connect Wallet</button>
+<button id="disconnectWallet" style="display:none;">Disconnect Wallet</button>
 <div id="walletAddress">Not connected</div>
 
 <h3>Allowed Collections</h3>
@@ -280,12 +280,9 @@
     loadInventoryStatus.innerText = 'Loading inventory...';
     walletInventory = {};
     try {
-      // For each allowed collection, fetch ERC-1155 balance per token id 0-99 for connectedAddress
       for (const col of allowedCollections) {
         const contractAddress = col.address;
         const alias = col.alias;
-
-        // Using minimal ABI for balanceOfBatch
         const abi = [ "function balanceOfBatch(address[] accounts, uint256[] ids) view returns (uint256[])" ];
         const contract = new ethers.Contract(contractAddress, abi, provider);
         const accounts = [];
@@ -295,7 +292,6 @@
           ids.push(i);
         }
         const balances = await contract.balanceOfBatch(accounts, ids);
-        // Record tokens with balance > 0
         for (let i = 0; i < balances.length; i++) {
           const bal = balances[i].toNumber ? balances[i].toNumber() : balances[i];
           if (bal > 0) {
@@ -315,7 +311,6 @@
       loadInventoryStatus.innerText = `Inventory loaded. Found ${countTokens} token${countTokens !== 1 ? 's' : ''}.`;
       generateGridBtn.disabled = false;
       exportManifestBtn.disabled = true;
-      // Reset grid and selections on inventory reload
       packGridDiv.innerHTML = '';
       currentSelections = [];
     } catch (e) {
@@ -337,7 +332,6 @@
       alert('Number of packs must be a number between 1 and 100.');
       return;
     }
-    // Reset selections and grid
     currentSelections = new Array(cardsPerPack * packsPerManifest).fill(null);
     packGridDiv.innerHTML = '';
 
@@ -352,13 +346,13 @@
       const select = document.createElement('select');
       select.id = `pack-select-${i}`;
 
-      // Default option - no selection
+      // Default option - no selection (starts red)
       const defaultOption = document.createElement('option');
       defaultOption.value = '';
       defaultOption.innerText = 'Select token';
       select.appendChild(defaultOption);
 
-      // Populate dropdown with available tokens that have balance > 0
+      // Populate dropdown with all tokens with balance > 0
       for (const key in walletInventory) {
         if (walletInventory[key].balance > 0) {
           const option = document.createElement('option');
@@ -368,31 +362,28 @@
         }
       }
 
-      // When user selects a token
+      // On user select
       select.addEventListener('change', (e) => {
         const newValue = e.target.value;
         const index = i;
         const prevValue = currentSelections[index];
 
-        // Return inventory count for previous selection, if any
+        // Restore balance if user changed selection or cleared
         if (prevValue) {
           walletInventory[prevValue].balance++;
         }
 
-        // Set new selection and decrement inventory if valid
         if (newValue && walletInventory[newValue].balance > 0) {
           walletInventory[newValue].balance--;
           currentSelections[index] = newValue;
-          e.target.classList.add('assigned');
+          e.target.classList.add('assigned'); // green background
         } else {
           currentSelections[index] = null;
-          e.target.classList.remove('assigned');
+          e.target.classList.remove('assigned'); // red background
         }
 
-        // Refresh all dropdown options to reflect current balances and disable zero-balance options
         refreshAllDropdowns();
 
-        // Enable export if all slots have a selection
         exportManifestBtn.disabled = currentSelections.includes(null);
       });
 
@@ -403,14 +394,14 @@
     exportManifestBtn.disabled = true;
   });
 
-  // --- Refresh dropdown options to show current inventory and disable unavailable options ---
+  // --- Refresh dropdowns to update balances & disable zero-balance tokens ---
   function refreshAllDropdowns() {
     for (let i = 0; i < currentSelections.length; i++) {
       const select = document.getElementById(`pack-select-${i}`);
       if (!select) continue;
       const currentSelected = currentSelections[i];
 
-      // Clear all options except the first (default)
+      // Remove all options except first (default)
       while (select.options.length > 1) {
         select.remove(1);
       }
@@ -420,15 +411,12 @@
         const option = document.createElement('option');
         option.value = key;
         option.innerText = `${key} (${bal} left)`;
-
-        // Disable if no balance and not currently selected in this dropdown
         if (bal === 0 && currentSelected !== key) {
           option.disabled = true;
         }
         select.appendChild(option);
       }
 
-      // Restore selected value if any
       if (currentSelected) {
         select.value = currentSelected;
         select.classList.add('assigned');
@@ -477,6 +465,5 @@
     URL.revokeObjectURL(url);
   });
 </script>
-
 </body>
 </html>
