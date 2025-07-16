@@ -33,10 +33,11 @@
       border-radius: 4px;
       border: 1px solid #aaa;
       cursor: pointer;
-      background-color: #f8d7da;
+      appearance: none;
+      background-color: #f8d7da; /* Red background for unassigned */
     }
     .pack select.assigned {
-      background-color: #d4edda;
+      background-color: #d4edda; /* Green for assigned */
       border-color: #28a745;
       color: #155724;
     }
@@ -87,9 +88,7 @@
   </style>
 </head>
 <body>
-
   <h1>Booster Pack Manifest Generator</h1>
-
   <button id="connectWallet">Connect Wallet</button>
   <div id="walletAddress">Not connected</div>
 
@@ -111,15 +110,10 @@
   </div>
 
   <div id="packGrid"></div>
-
   <button id="exportManifest" style="margin-top: 20px;" disabled>Export Manifest</button>
 
   <script>
-    console.log("🔥 JS loaded and running");
-
-    let provider;
-    let signer;
-    let connectedAddress = null;
+    let provider, signer, connectedAddress = null;
     let allowedCollections = [];
     let walletInventory = {};
     let currentSelections = [];
@@ -141,149 +135,167 @@
       }
     });
 
-    document.getElementById('addCollectionBtn').addEventListener('click', () => {
+    function addCollectionRow(address = '', alias = '') {
       const container = document.getElementById('collectionsList');
       const row = document.createElement('div');
       row.className = 'collection-row';
 
       const addrInput = document.createElement('input');
       addrInput.type = 'text';
-      addrInput.placeholder = '0x Collection Address';
+      addrInput.placeholder = 'Collection Address';
+      addrInput.value = address;
       addrInput.className = 'address';
 
       const aliasInput = document.createElement('input');
       aliasInput.type = 'text';
       aliasInput.placeholder = 'Alias';
+      aliasInput.value = alias.toUpperCase();
       aliasInput.className = 'alias';
 
       const removeBtn = document.createElement('button');
-      removeBtn.innerText = 'X';
-      removeBtn.onclick = () => row.remove();
+      removeBtn.textContent = 'X';
+      removeBtn.addEventListener('click', () => row.remove());
 
       row.appendChild(addrInput);
       row.appendChild(aliasInput);
       row.appendChild(removeBtn);
       container.appendChild(row);
+    }
+
+    document.getElementById('addCollectionBtn').addEventListener('click', () => {
+      addCollectionRow();
     });
 
-    document.getElementById('loadInventoryBtn').addEventListener('click', async () => {
-      walletInventory = {};
-      allowedCollections = [];
-
+    async function loadInventory() {
+      document.getElementById('loadInventoryStatus').textContent = 'Loading inventory...';
       const rows = document.querySelectorAll('.collection-row');
+      allowedCollections = [];
+      walletInventory = {};
+
       for (const row of rows) {
         const addr = row.querySelector('.address').value.trim();
         const alias = row.querySelector('.alias').value.trim().toUpperCase();
-        if (ethers.utils.isAddress(addr) && alias.length > 0) {
+        if (ethers.utils.isAddress(addr) && alias) {
           allowedCollections.push({ address: addr, alias });
         }
       }
 
-      if (!provider || !connectedAddress) {
-        alert('Please connect wallet first.');
-        return;
-      }
-
-      document.getElementById('loadInventoryStatus').innerText = 'Loading inventory...';
-
       for (const { address, alias } of allowedCollections) {
-        try {
-          const contract = new ethers.Contract(address, [
-            'function balanceOf(address owner, uint256 id) view returns (uint256)',
-            'function uri(uint256) view returns (string)'
-          ], provider);
+        const contract = new ethers.Contract(address, [
+          "function balanceOf(address, uint256) view returns (uint256)"
+        ], provider);
 
-          for (let tokenId = 0; tokenId < 200; tokenId++) {
+        for (let tokenId = 0; tokenId < 200; tokenId++) {
+          try {
             const balance = await contract.balanceOf(connectedAddress, tokenId);
             if (balance.gt(0)) {
-              walletInventory[`${alias}/${tokenId}`] = balance.toNumber();
+              const key = `${alias}/${tokenId}`;
+              walletInventory[key] = balance.toNumber();
             }
-          }
-        } catch (err) {
-          console.error('Inventory load failed:', err);
+          } catch {}
         }
       }
 
-      document.getElementById('loadInventoryStatus').innerText = '✅ Inventory loaded';
+      document.getElementById('loadInventoryStatus').textContent = '✅ Inventory loaded';
+    }
+
+    document.getElementById('loadInventoryBtn').addEventListener('click', async () => {
+      await loadInventory();
     });
 
     document.getElementById('generateGridBtn').addEventListener('click', () => {
+      if (Object.keys(walletInventory).length === 0) {
+        alert("Please load inventory before generating the grid.");
+        return;
+      }
+
       const cardsPerPack = parseInt(document.getElementById('cardsPerPack').value);
       const numPacks = parseInt(document.getElementById('packsPerManifest').value);
-      const packGrid = document.getElementById('packGrid');
-      packGrid.innerHTML = '';
+      const gridContainer = document.getElementById('packGrid');
       currentSelections = [];
+      gridContainer.innerHTML = '';
 
-      for (let i = 0; i < numPacks; i++) {
+      for (let p = 0; p < numPacks; p++) {
         const pack = document.createElement('div');
         pack.className = 'pack';
+        const packSelection = [];
 
-        const selections = [];
-
-        for (let j = 0; j < cardsPerPack; j++) {
+        for (let c = 0; c < cardsPerPack; c++) {
           const select = document.createElement('select');
-          select.innerHTML = `<option disabled selected>Select a token</option>`;
+          const option = document.createElement('option');
+          option.text = 'Select a token';
+          select.appendChild(option);
 
           for (const key in walletInventory) {
-            const qty = walletInventory[key];
-            if (qty > 0) {
-              select.innerHTML += `<option value="${key}">${key} (${qty})</option>`;
+            if (walletInventory[key] > 0) {
+              const opt = document.createElement('option');
+              opt.value = key;
+              opt.text = key;
+              select.appendChild(opt);
             }
           }
 
-          select.addEventListener('change', (e) => {
-            const val = e.target.value;
-            const [alias, tokenId] = val.split('/');
-            if (walletInventory[val] > 0) {
-              walletInventory[val]--;
-              e.target.classList.add('assigned');
-              e.target.innerHTML = `<option>${val}</option>`;
-              selections[j] = { collectionAlias: alias, tokenId: parseInt(tokenId) };
-              checkIfReady();
+          select.addEventListener('change', () => {
+            const prev = select.getAttribute('data-prev');
+            if (prev && walletInventory[prev] !== undefined) {
+              walletInventory[prev]++;
             }
+
+            const selected = select.value;
+            if (walletInventory[selected] > 0) {
+              walletInventory[selected]--;
+              select.classList.add('assigned');
+              select.setAttribute('data-prev', selected);
+              checkExportReadiness();
+            } else {
+              alert("This token is no longer available.");
+              select.value = '';
+            }
+
+            // Refresh all other dropdowns
+            document.querySelectorAll('select').forEach(drop => {
+              if (!drop.classList.contains('assigned')) {
+                [...drop.options].forEach(opt => {
+                  if (walletInventory[opt.value] === 0 && opt.value !== '') {
+                    opt.disabled = true;
+                  }
+                });
+              }
+            });
           });
 
           pack.appendChild(select);
-          selections.push(null);
+          packSelection.push(select);
         }
 
-        currentSelections.push(selections);
-        packGrid.appendChild(pack);
+        currentSelections.push(packSelection);
+        gridContainer.appendChild(pack);
       }
-
-      checkIfReady();
     });
 
-    function checkIfReady() {
-      const exportBtn = document.getElementById('exportManifest');
-      let ready = true;
-
+    function checkExportReadiness() {
       for (const pack of currentSelections) {
-        for (const entry of pack) {
-          if (!entry) {
-            ready = false;
+        for (const sel of pack) {
+          if (!sel.classList.contains('assigned')) {
+            document.getElementById('exportManifest').disabled = true;
+            return;
           }
         }
       }
-
-      exportBtn.disabled = !ready;
+      document.getElementById('exportManifest').disabled = false;
     }
 
     document.getElementById('exportManifest').addEventListener('click', () => {
       const manifest = currentSelections.map(pack =>
-        pack.map(entry => ({
-          collectionAlias: entry.collectionAlias,
-          tokenId: entry.tokenId
-        }))
+        pack.map(sel => sel.value)
       );
-
       const blob = new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
-
       const a = document.createElement('a');
       a.href = url;
       a.download = 'manifest.json';
       a.click();
+      URL.revokeObjectURL(url);
     });
   </script>
 </body>
