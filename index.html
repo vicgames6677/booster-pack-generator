@@ -13,12 +13,6 @@
       margin-top: 10px;
       font-weight: bold;
     }
-    #packGrid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-      gap: 10px;
-      margin-top: 20px;
-    }
     .pack {
       padding: 10px;
       border: 1px solid #ccc;
@@ -28,16 +22,15 @@
       width: 100%;
       margin-bottom: 5px;
       font-weight: bold;
-      color: #333;
       padding: 5px;
       border-radius: 4px;
       border: 1px solid #aaa;
       cursor: pointer;
       appearance: none;
-      background-color: #f8d7da; /* Red background for unassigned */
+      background-color: #f8d7da; /* light red = incomplete */
     }
     .pack select.assigned {
-      background-color: #d4edda; /* Green for assigned */
+      background-color: #d4edda; /* light green = complete */
       border-color: #28a745;
       color: #155724;
     }
@@ -73,9 +66,6 @@
       cursor: pointer;
       font-weight: bold;
     }
-    .collection-row button:hover {
-      background: #bd2130;
-    }
     #loadInventoryStatus {
       margin-bottom: 10px;
       font-weight: bold;
@@ -88,215 +78,239 @@
   </style>
 </head>
 <body>
-  <h1>Booster Pack Manifest Generator</h1>
-  <button id="connectWallet">Connect Wallet</button>
-  <div id="walletAddress">Not connected</div>
 
-  <h3>Allowed Collections</h3>
-  <div id="collectionsList"></div>
-  <button id="addCollectionBtn">Add Collection</button>
+<h1>Booster Pack Manifest Generator</h1>
 
-  <button id="loadInventoryBtn" style="margin-top:10px;">Load Inventory</button>
-  <div id="loadInventoryStatus"></div>
+<button id="connectWallet">Connect Wallet</button>
+<div id="walletAddress">Not connected</div>
 
-  <div style="margin-top: 20px;">
-    <label for="cardsPerPack">Cards per Pack:</label>
-    <input type="number" id="cardsPerPack" value="5" min="1" max="50" />
+<h3>Allowed Collections</h3>
+<div id="collectionsList"></div>
+<button id="addCollectionBtn">Add Collection</button>
 
-    <label for="packsPerManifest">Number of Packs:</label>
-    <input type="number" id="packsPerManifest" value="10" min="1" max="100" />
+<button id="loadInventoryBtn" style="margin-top:10px;">Load Inventory</button>
+<div id="loadInventoryStatus"></div>
 
-    <button id="generateGridBtn">Generate Pack Grid</button>
-  </div>
+<div style="margin-top: 20px;">
+  <label for="cardsPerPack">Cards per Pack:</label>
+  <input type="number" id="cardsPerPack" value="5" min="1" max="50" />
 
-  <div id="packGrid"></div>
-  <button id="exportManifest" style="margin-top: 20px;" disabled>Export Manifest</button>
+  <label for="packsPerManifest">Number of Packs:</label>
+  <input type="number" id="packsPerManifest" value="10" min="1" max="100" />
 
-  <script>
-    let provider, signer, connectedAddress = null;
-    let allowedCollections = [];
-    let walletInventory = {};
-    let currentSelections = [];
+  <button id="generateGridBtn">Generate Pack Grid</button>
+</div>
 
-    document.getElementById('connectWallet').addEventListener('click', async () => {
-      if (window.ethereum) {
-        try {
-          await window.ethereum.request({ method: 'eth_requestAccounts' });
-          provider = new ethers.providers.Web3Provider(window.ethereum);
-          signer = provider.getSigner();
-          connectedAddress = await signer.getAddress();
-          document.getElementById('walletAddress').innerText = `Connected: ${connectedAddress}`;
-        } catch (err) {
-          alert('Wallet connection failed.');
-          console.error(err);
-        }
-      } else {
-        alert('MetaMask not detected.');
+<div id="packGrid"></div>
+
+<button id="exportManifest" style="margin-top: 20px;" disabled>Export Manifest</button>
+
+<script>
+  let provider, signer, connectedAddress = null;
+  let allowedCollections = [];
+  let walletInventory = {};
+  let currentSelections = [];
+
+  async function connectWallet() {
+    if (window.ethereum) {
+      try {
+        await window.ethereum.request({ method: 'eth_requestAccounts' });
+        provider = new ethers.providers.Web3Provider(window.ethereum);
+        signer = provider.getSigner();
+        connectedAddress = await signer.getAddress();
+        document.getElementById('walletAddress').innerText = `Connected: ${connectedAddress}`;
+        clearSelections();
+      } catch (err) {
+        alert('Wallet connection failed.');
+        console.error(err);
       }
-    });
-
-    function addCollectionRow(address = '', alias = '') {
-      const container = document.getElementById('collectionsList');
-      const row = document.createElement('div');
-      row.className = 'collection-row';
-
-      const addrInput = document.createElement('input');
-      addrInput.type = 'text';
-      addrInput.placeholder = 'Collection Address';
-      addrInput.value = address;
-      addrInput.className = 'address';
-
-      const aliasInput = document.createElement('input');
-      aliasInput.type = 'text';
-      aliasInput.placeholder = 'Alias';
-      aliasInput.value = alias.toUpperCase();
-      aliasInput.className = 'alias';
-
-      const removeBtn = document.createElement('button');
-      removeBtn.textContent = 'X';
-      removeBtn.addEventListener('click', () => row.remove());
-
-      row.appendChild(addrInput);
-      row.appendChild(aliasInput);
-      row.appendChild(removeBtn);
-      container.appendChild(row);
+    } else {
+      alert('MetaMask not detected.');
     }
+  }
 
-    document.getElementById('addCollectionBtn').addEventListener('click', () => {
-      addCollectionRow();
-    });
+  function addCollectionRow(address = '', alias = '') {
+    const container = document.getElementById('collectionsList');
+    const row = document.createElement('div');
+    row.className = 'collection-row';
 
-    async function loadInventory() {
-      document.getElementById('loadInventoryStatus').textContent = 'Loading inventory...';
-      const rows = document.querySelectorAll('.collection-row');
-      allowedCollections = [];
-      walletInventory = {};
+    const addrInput = document.createElement('input');
+    addrInput.type = 'text';
+    addrInput.placeholder = 'Collection Address (0x...)';
+    addrInput.value = address;
+    addrInput.className = 'address';
 
-      for (const row of rows) {
-        const addr = row.querySelector('.address').value.trim();
-        const alias = row.querySelector('.alias').value.trim().toUpperCase();
-        if (ethers.utils.isAddress(addr) && alias) {
-          allowedCollections.push({ address: addr, alias });
-        }
+    const aliasInput = document.createElement('input');
+    aliasInput.type = 'text';
+    aliasInput.placeholder = 'Alias';
+    aliasInput.value = alias.toUpperCase();
+    aliasInput.className = 'alias';
+
+    const removeBtn = document.createElement('button');
+    removeBtn.textContent = 'X';
+    removeBtn.onclick = () => container.removeChild(row);
+
+    row.appendChild(addrInput);
+    row.appendChild(aliasInput);
+    row.appendChild(removeBtn);
+    container.appendChild(row);
+  }
+
+  function gatherCollections() {
+    allowedCollections = [];
+    const rows = document.querySelectorAll('#collectionsList .collection-row');
+    rows.forEach(row => {
+      const addr = row.querySelector('.address').value.trim();
+      const alias = row.querySelector('.alias').value.trim().toUpperCase();
+      if (ethers.utils.isAddress(addr) && alias.length > 0) {
+        allowedCollections.push({ address: addr, alias });
       }
+    });
+  }
 
-      for (const { address, alias } of allowedCollections) {
-        const contract = new ethers.Contract(address, [
-          "function balanceOf(address, uint256) view returns (uint256)"
+  async function loadInventory() {
+    gatherCollections();
+    document.getElementById('loadInventoryStatus').innerText = 'Loading...';
+    document.getElementById('loadInventoryStatus').style.color = '#007bff';
+    walletInventory = {};
+
+    for (const col of allowedCollections) {
+      try {
+        const contract = new ethers.Contract(col.address, [
+          "function balanceOf(address account, uint256 id) view returns (uint256)",
         ], provider);
 
-        for (let tokenId = 0; tokenId < 200; tokenId++) {
-          try {
-            const balance = await contract.balanceOf(connectedAddress, tokenId);
-            if (balance.gt(0)) {
-              const key = `${alias}/${tokenId}`;
-              walletInventory[key] = balance.toNumber();
-            }
-          } catch {}
+        for (let id = 0; id < 200; id++) {
+          const balance = await contract.balanceOf(connectedAddress, id);
+          if (balance > 0) {
+            const key = `${col.alias}/${id}`;
+            walletInventory[key] = Number(balance);
+          }
         }
+      } catch (e) {
+        console.error(`Error loading from ${col.alias}:`, e);
       }
-
-      document.getElementById('loadInventoryStatus').textContent = '✅ Inventory loaded';
     }
 
-    document.getElementById('loadInventoryBtn').addEventListener('click', async () => {
-      await loadInventory();
-    });
+    document.getElementById('loadInventoryStatus').innerText = 'Inventory Loaded ✔';
+    document.getElementById('loadInventoryStatus').style.color = 'green';
+  }
 
-    document.getElementById('generateGridBtn').addEventListener('click', () => {
-      if (Object.keys(walletInventory).length === 0) {
-        alert("Please load inventory before generating the grid.");
-        return;
-      }
+  function clearSelections() {
+    currentSelections = [];
+    document.getElementById('packGrid').innerHTML = '';
+    document.getElementById('exportManifest').disabled = true;
+  }
 
-      const cardsPerPack = parseInt(document.getElementById('cardsPerPack').value);
-      const numPacks = parseInt(document.getElementById('packsPerManifest').value);
-      const gridContainer = document.getElementById('packGrid');
-      currentSelections = [];
-      gridContainer.innerHTML = '';
+  function generatePackGrid() {
+    clearSelections();
+    const cardsPerPack = parseInt(document.getElementById('cardsPerPack').value);
+    const packsPerManifest = parseInt(document.getElementById('packsPerManifest').value);
+    const packGrid = document.getElementById('packGrid');
 
-      for (let p = 0; p < numPacks; p++) {
-        const pack = document.createElement('div');
-        pack.className = 'pack';
-        const packSelection = [];
+    for (let i = 0; i < packsPerManifest; i++) {
+      const packDiv = document.createElement('div');
+      packDiv.className = 'pack';
+      currentSelections[i] = [];
 
-        for (let c = 0; c < cardsPerPack; c++) {
-          const select = document.createElement('select');
+      for (let j = 0; j < cardsPerPack; j++) {
+        const select = document.createElement('select');
+        const placeholder = document.createElement('option');
+        placeholder.text = 'Select a token';
+        placeholder.disabled = true;
+        placeholder.selected = true;
+        select.appendChild(placeholder);
+
+        for (const key in walletInventory) {
           const option = document.createElement('option');
-          option.text = 'Select a token';
-          select.appendChild(option);
-
-          for (const key in walletInventory) {
-            if (walletInventory[key] > 0) {
-              const opt = document.createElement('option');
-              opt.value = key;
-              opt.text = key;
-              select.appendChild(opt);
-            }
+          option.value = key;
+          option.text = `${key} (${walletInventory[key]} left)`;
+          if (walletInventory[key] <= 0) {
+            option.disabled = true;
           }
-
-          select.addEventListener('change', () => {
-            const prev = select.getAttribute('data-prev');
-            if (prev && walletInventory[prev] !== undefined) {
-              walletInventory[prev]++;
-            }
-
-            const selected = select.value;
-            if (walletInventory[selected] > 0) {
-              walletInventory[selected]--;
-              select.classList.add('assigned');
-              select.setAttribute('data-prev', selected);
-              checkExportReadiness();
-            } else {
-              alert("This token is no longer available.");
-              select.value = '';
-            }
-
-            // Refresh all other dropdowns
-            document.querySelectorAll('select').forEach(drop => {
-              if (!drop.classList.contains('assigned')) {
-                [...drop.options].forEach(opt => {
-                  if (walletInventory[opt.value] === 0 && opt.value !== '') {
-                    opt.disabled = true;
-                  }
-                });
-              }
-            });
-          });
-
-          pack.appendChild(select);
-          packSelection.push(select);
+          select.appendChild(option);
         }
 
-        currentSelections.push(packSelection);
-        gridContainer.appendChild(pack);
-      }
-    });
-
-    function checkExportReadiness() {
-      for (const pack of currentSelections) {
-        for (const sel of pack) {
-          if (!sel.classList.contains('assigned')) {
-            document.getElementById('exportManifest').disabled = true;
+        select.addEventListener('change', (e) => {
+          const value = e.target.value;
+          if (!walletInventory[value] || walletInventory[value] <= 0) {
+            alert("No copies left.");
             return;
           }
-        }
-      }
-      document.getElementById('exportManifest').disabled = false;
-    }
 
-    document.getElementById('exportManifest').addEventListener('click', () => {
-      const manifest = currentSelections.map(pack =>
-        pack.map(sel => sel.value)
-      );
-      const blob = new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'manifest.json';
-      a.click();
-      URL.revokeObjectURL(url);
+          // Undo previous selection if any
+          const previous = currentSelections[i][j];
+          if (previous) {
+            walletInventory[previous]++;
+          }
+
+          currentSelections[i][j] = value;
+          walletInventory[value]--;
+
+          updateGrid();
+        });
+
+        packDiv.appendChild(select);
+      }
+
+      packGrid.appendChild(packDiv);
+    }
+  }
+
+  function updateGrid() {
+    const selects = document.querySelectorAll('#packGrid select');
+    selects.forEach(select => {
+      const current = select.value;
+      select.innerHTML = '';
+
+      const placeholder = document.createElement('option');
+      placeholder.text = 'Select a token';
+      placeholder.disabled = true;
+      if (!current) placeholder.selected = true;
+      select.appendChild(placeholder);
+
+      for (const key in walletInventory) {
+        const option = document.createElement('option');
+        const left = walletInventory[key];
+        option.value = key;
+        option.text = `${key} (${left} left)`;
+        option.disabled = left <= 0;
+        if (key === current) {
+          option.selected = true;
+        }
+        select.appendChild(option);
+      }
+
+      select.className = current ? 'assigned' : '';
     });
-  </script>
+
+    const complete = currentSelections.every(pack =>
+      pack.length > 0 && pack.every(entry => entry)
+    );
+
+    document.getElementById('exportManifest').disabled = !complete;
+  }
+
+  function exportManifest() {
+    const data = currentSelections.map(pack => pack.slice());
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'booster-manifest.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  document.getElementById('connectWallet').onclick = connectWallet;
+  document.getElementById('addCollectionBtn').onclick = () => addCollectionRow();
+  document.getElementById('loadInventoryBtn').onclick = loadInventory;
+  document.getElementById('generateGridBtn').onclick = generatePackGrid;
+  document.getElementById('exportManifest').onclick = exportManifest;
+
+  // Init
+  addCollectionRow();
+</script>
+
 </body>
 </html>
